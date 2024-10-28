@@ -1,3 +1,10 @@
+// Universidad del Valle de Guatemala
+// Electrónica Digital 2
+// Ana Carolina Gramajo Quijivix - 22401
+// Implementa dos protocolos de comunicación con el ESP32.
+// Se utiliza la comunicación I2C para recibir el valor de un potenciómetro del ESP32.
+// Se utiliza la comunicación SPI enviar información sobre el led que se desea encender y por cuánto tiempo. 
+
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
