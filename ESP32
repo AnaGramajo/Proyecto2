@@ -1,3 +1,10 @@
+// Universidad del Valle de Guatemala
+// Electrónica Digital 2
+// Ana Carolina Gramajo Quijivix - 22401
+// Implementa dos protocolos de comunicación con el Núcleo F446RE.
+// Se utiliza la comunicación I2C para enviar el valor de un potenciómetro al núcleo.
+// Se utiliza la comunicación SPI recibir información sobre el led que se desea encender y por cuánto tiempo. 
+
 #include <Arduino.h>
 #include "Wire.h"
 
