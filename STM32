@@ -66,6 +66,7 @@ uint8_t buffer[6]; // Recibe los datos ingresados por el usuario en el formato l
 uint8_t LED_Buffer[8]; // Almacena el led a encender y el tiempo en milisegundos
 uint8_t led; // Variable que guarda el valor del led a encender
 uint16_t tiempo; // Variable que guarda el valor del tiempo a encender la led
+uint8_t residuos[3];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -143,50 +144,46 @@ int main(void)
 		  HAL_UART_Transmit(&huart2, (uint8_t *)RX_Buffer, sizeof(RX_Buffer), HAL_MAX_DELAY);
 		  HAL_Delay(1000);
 	  } else if (TX_Buffer[0] == 49) { // 49 es 1 en ASCII, quiere controlar las leds
+		  HAL_UART_Receive(&huart2, (uint8_t*)residuos, sizeof(residuos), 100); // Limpia los residuos de la comunicación serial.
 		  uint8_t escoger[] = "\nIngrese el led que desea encender y el tiempo (en ms) que desea que permanezca encendido.\n";
 		  uint8_t opciones[] = "Ingrese 1 para el led blanco, 2 para el led amarillo y 3 para el led rojo.\n";
 		  uint8_t formato[] = "Utilice el formato que se muestra: 1,500\n";
-		  uint8_t limite[] = "Por favor ingrese un tiempo mayor o igual a 1000 ms (1 segundo)\n";
+		  uint8_t limite[] = "Para el tiempo debe ingresar un valor de 4 digitos. Por ejemplo, si desea 100 ms ingrese 0100\n";
 		  // Muestra los mensajes en la interfaz Hércules
 		  HAL_UART_Transmit(&huart2, escoger, sizeof(escoger), HAL_MAX_DELAY);
 		  HAL_UART_Transmit(&huart2, opciones, sizeof(opciones), HAL_MAX_DELAY);
 		  HAL_UART_Transmit(&huart2, formato, sizeof(formato), HAL_MAX_DELAY);
 		  HAL_UART_Transmit(&huart2, limite, sizeof(limite), HAL_MAX_DELAY);
 		  // Recibe los datos ingresados por el usuario en el formato led,tiempo
-		  HAL_UART_Receive(&huart2, (uint8_t*)buffer, sizeof(buffer), 30000);
+		  HAL_UART_Receive(&huart2, (uint8_t*)buffer, sizeof(buffer), 60000);
 		  // Muestra el buffer recibido en la interfaz hércules
 		  HAL_UART_Transmit(&huart2, (uint8_t*)salto, sizeof(salto), HAL_MAX_DELAY);
 		  HAL_UART_Transmit(&huart2, (uint8_t*)buffer, sizeof(LED_Buffer), HAL_MAX_DELAY);
 		  // Procesa el buffer
-		  char *negativo = strtok(buffer, "-"); // Toma el buffer hasta que encuentra un signo menos
-		  if (negativo != NULL) {
-			  char *segmento = strtok(buffer, ","); // Toma el buffer hasta que encuentra la primera coma, luego la reemplaza por \0
-			  if (segmento != NULL) { // Sí hay una coma en el buffer
-				  led = strtol(segmento, NULL, 10); // Convierte el segmento en un número entero
-				  segmento = strtok(NULL, ","); // Toma otro segmento desde que se encontró la coma
-				  if (segmento != NULL) { // Sí hay datos disponibles
-					  tiempo = strtol(segmento, NULL, 10); // Convierte el segmento en un número entero
-					  if (led>0 && led<4 && tiempo>999) {
-						  // Crea un nuevo buffer que se enviará al ESP32
-						  LED_Buffer[0] = led; // Guarda el valor del led en el primer elemento
-						  // Divide el tiempo (uint16_t) en dos números uint8_t
-						  LED_Buffer[1] = (tiempo >> 8) & 0xFF; // Byte más significativo
-						  LED_Buffer[2] = tiempo & 0xFF; // Byte menos segnificativo
-						  // Rellena el resto del buffer con ceros
-						  for (int i = 3; i < sizeof(LED_Buffer); i++) {
-							  LED_Buffer[i] = 0;
-						  }
-						  HAL_Delay(1000);
-						  // Habilita la comunicación SPI
-						  HAL_GPIO_WritePin(ESP32_CS_GPIO_Port, ESP32_CS_Pin, GPIO_PIN_RESET);
-						  // Manda el nuevo buffer
-						  HAL_SPI_Transmit(&hspi1, (uint8_t*)LED_Buffer, sizeof(LED_Buffer), HAL_MAX_DELAY);
-						  HAL_Delay(50);
-						  // Deshabilita la comunicación SPI
-						  HAL_GPIO_WritePin(ESP32_CS_GPIO_Port, ESP32_CS_Pin, GPIO_PIN_SET);
-					  } else {
-						  HAL_UART_Transmit(&huart2, (uint8_t*)error, sizeof(error), HAL_MAX_DELAY);
+		  char *segmento = strtok(buffer, ","); // Toma el buffer hasta que encuentra la primera coma, luego la reemplaza por \0
+		  if (segmento != NULL) { // Sí hay una coma en el buffer
+			  led = strtol(segmento, NULL, 10); // Convierte el segmento en un número entero
+			  segmento = strtok(NULL, ","); // Toma otro segmento desde que se encontró la coma
+			  if (segmento != NULL) { // Sí hay datos disponibles
+				  tiempo = strtol(segmento, NULL, 10); // Convierte el segmento en un número entero
+				  if (led>0 && led<4 && tiempo>0) {
+					  // Crea un nuevo buffer que se enviará al ESP32
+					  LED_Buffer[0] = led; // Guarda el valor del led en el primer elemento
+					  // Divide el tiempo (uint16_t) en dos números uint8_t
+					  LED_Buffer[1] = (tiempo >> 8) & 0xFF; // Byte más significativo
+					  LED_Buffer[2] = tiempo & 0xFF; // Byte menos segnificativo
+					  // Rellena el resto del buffer con ceros
+					  for (int i = 3; i < sizeof(LED_Buffer); i++) {
+						  LED_Buffer[i] = 0;
 					  }
+					  HAL_Delay(1000);
+					  // Habilita la comunicación SPI
+					  HAL_GPIO_WritePin(ESP32_CS_GPIO_Port, ESP32_CS_Pin, GPIO_PIN_RESET);
+					  // Manda el nuevo buffer
+					  HAL_SPI_Transmit(&hspi1, (uint8_t*)LED_Buffer, sizeof(LED_Buffer), HAL_MAX_DELAY);
+					  HAL_Delay(50);
+					  // Deshabilita la comunicación SPI
+					  HAL_GPIO_WritePin(ESP32_CS_GPIO_Port, ESP32_CS_Pin, GPIO_PIN_SET);
 				  } else {
 					  HAL_UART_Transmit(&huart2, (uint8_t*)error, sizeof(error), HAL_MAX_DELAY);
 				  }
@@ -201,6 +198,7 @@ int main(void)
 	  } else {
 		  HAL_UART_Transmit(&huart2, (uint8_t *)error, sizeof(error), HAL_MAX_DELAY);
 	  }
+	  HAL_UART_Receive(&huart2, (uint8_t*)residuos, sizeof(residuos), 100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
