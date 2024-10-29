@@ -5,33 +5,83 @@
 // Se utiliza la comunicación I2C para enviar el valor de un potenciómetro al núcleo.
 // Se utiliza la comunicación SPI recibir información sobre el led que se desea encender y por cuánto tiempo. 
 
+/*****Librerías*****/ 
+
 #include <Arduino.h>
-#include "Wire.h"
+#include "Wire.h" // Se utiliza para la comunicación I2C
+#include <ESP32SPISlave.h> // Se utiliza para la comunicación SPI
 
-// Variables globales
-#define I2C_DEV_ADDR 0x55
-#define P1 32
+/*****Definición de pines*****/ 
+// Comunicación I2C
+#define P1 32 // Se establece el pin del potenciómetro
+// Comuniación SPI
+#define ledb 14 // Se establece el pin del led blanco  
+#define leda 12 // Se establece el pin del led amarillo
+#define ledr 13 // Se establece el pin del led rojo
 
-// Declaración de funciones
-void onRequest();
-void onReceive(int len);
+/*****Variables globales*****/ 
+// Comunicación I2C
+#define I2C_DEV_ADDR 0x55 // Dirección de "esclavo" del ESP32
+// Comunicación SPI
+uint8_t led; // Variable que guarda el led que el usuario desea encender
+uint16_t tiempo_ms; // Variable que guarda el tiempo (en ms) que el usuario desea encender la led
+ESP32SPISlave slave; 
+#define QUEUE_SIZE 1 // Tamaño de la cola de mensajes a procesar
+static constexpr size_t BUFFER_SIZE = 8; // Establece el tamaño del buffer que va a recibir la información
+uint8_t rx_buf[BUFFER_SIZE] {0, 0, 0, 0, 0, 0, 0, 0}; // Buffer que va a recibir la información
+
+
+/*****Prototipos de funciones*****/
+// Comunicación I2C
+void onRequest(); // Función que se llama cuando el maestro solicita información
+// Comunicación SPI
+void encenderLed(uint8_t l, uint16_t t); // Función para encender el led indicado, el tiempo deseado
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200); // Se inicia la comunicación serial con la computadora
   Serial.setDebugOutput(true);
-  Wire.onReceive(onReceive);
+  /*****Comunicación I2C*****/
+  // Se inicia la comunicación
   Wire.onRequest(onRequest);
   Wire.begin((uint8_t)I2C_DEV_ADDR);
-  pinMode(P1,INPUT);
+  // Configuración del pin del potenciómetro
+  pinMode(P1, INPUT);
+  /*****Comunicación SPI*****/
+  // Configuración de pines de salida para los LEDs
+  pinMode(ledr, OUTPUT);
+  pinMode(ledb, OUTPUT);
+  pinMode(leda, OUTPUT);
+  // Configura la comunicación
+  slave.setDataMode(SPI_MODE0);
+  slave.setQueueSize(QUEUE_SIZE); // Establece el tamaño de la cola de mensajes
+  slave.begin(VSPI); // Establece qué pines se usan para la comunicación VSPI = CS: 5, CLK: 18, MOSI:23, MISO:19
 }
 
 void loop() {
+  if (slave.hasTransactionsCompletedAndAllResultsHandled()) {
+    memset(rx_buf, 0, BUFFER_SIZE); // Inicializa el buffer con 0 en todos sus elementos
+    slave.queue(NULL, rx_buf, BUFFER_SIZE); // Establece que el buffer rx_buf va a recibir la información
+    slave.trigger(); // Ejecuta las transacciones en la cola
+    delay(100);
+  }
   
+  if (slave.hasTransactionsCompletedAndAllResultsReady(QUEUE_SIZE)) {
+    size_t received_bytes = slave.numBytesReceived();
+    led = rx_buf[0]; // Establece que led es el valor del primer elemento del buffer
+    Serial.print("LED: "); // Imprime el valor recibido
+    Serial.println(led);
+    uint16_t tiempo_ms = (rx_buf[1] << 8) | rx_buf[2]; // Vuelve a armar el uint16_t que corresponde a la variable tiempo
+    Serial.print("Tiempo: "); // Imprime el valor calculado
+    Serial.println(tiempo_ms);
+    encenderLed(led, tiempo_ms); // Manda el led y el tiempo indicado a la función encenderLed
+  }
 }
 
-// Funciones
+/*****Funciones*****/
+// Comunicación I2C
 void onRequest() {
-  int sensor = analogRead(P1);
+  int sensor = analogRead(P1); // Lee el valor del potenciómetro
+  // Dependiendo del valor del potenciómetro le agrega ceros para que se lea correctamente en un buffer de 4 elementos
   if(sensor < 10) {
     Wire.print("000");
     Wire.print(sensor);
@@ -44,12 +94,30 @@ void onRequest() {
   } else {
     Wire.print(sensor);
   }
-  Serial.println("onRequest");
-  Serial.println(sensor);
-  Serial.println();
+  Serial.print("onRequest: ");
+  Serial.println(sensor); // Muestra el valor del sensor en la pantalla serial
+  Serial.println(); 
 }
-
-void onReceive(int len) {
-  Serial.printf("onReceive[%d]: ", len);
-  Serial.println();
+// Comunicación SPI
+void encenderLed(uint8_t l, uint16_t t) { // Función que enciende el led seleccionado, el tiempo indicado
+  switch (l)
+  {
+  case 1:
+    digitalWrite(ledb, HIGH); // Enciende el led banco
+    delay(t); // Espera el tiempo indicado
+    digitalWrite(ledb, LOW); // Apaga el led
+    break;
+  case 2:
+    digitalWrite(leda, HIGH); // Enciende el led amarillo
+    delay(t); // Espera el tiempo indicado
+    digitalWrite(leda, LOW); // Apaga el led
+    break;
+  case 3:
+    digitalWrite(ledr, HIGH); // Enciende el led rojo
+    delay(t); // Espera el tiempo indicado
+    digitalWrite(ledr, LOW); // Apaga el led
+    break;
+  default:
+    break;
+  }
 }
